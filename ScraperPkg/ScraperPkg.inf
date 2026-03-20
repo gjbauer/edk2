@@ -1,0 +1,44 @@
+## @file                                                                                                                                                        
+#  UEFI application to scrape RAM contents.                                                                   
+#                                                                                                                                                               
+#  Copyright (c) 2025, Gabriel Bauer. All rights reserved.<BR>                                                                                              
+#  MIT License                                                                                                               
+#                                                                                                                                                               
+##                                                                                                                                                              
+                                                                                                                                                                
+[Defines]                                                                                                                                                       
+  INF_VERSION                    = 0x00010006                                                                                                                   
+  BASE_NAME                      = ScraperPkg                                                                                                               
+  FILE_GUID                      = 12345678-1234-1234-1234-123456789ABC                                                                                         
+  MODULE_TYPE                    = UEFI_APPLICATION                                                                                                             
+  VERSION_STRING                 = 1.0                                                                                                                          
+  ENTRY_POINT                    = UefiMain                                                                                                                     
+                                                                                                                                                                
+#                                                                                                                                                               
+# The following information is for reference only and not required by the build tools.                                                                          
+#                                                                                                                                                               
+#  VALID_ARCHITECTURES           = IA32 X64 AARCH64 RISCV64                                                                                                     
+#                                                                                                                                                               
+                                                                                                                                                                
+[Sources]                                                                                                                                                       
+  Scraper.c                                                                                                                                              
+                                                                                                                                                                
+[Packages]                                                                                                                                                      
+  MdePkg/MdePkg.dec                                                                                                                                             
+                                                                                                                                                                
+[LibraryClasses]                                                                                                                                                
+  UefiApplicationEntryPoint                                                                                                                                     
+  UefiLib                                                                                                                                                       
+  UefiBootServicesTableLib                                                                                                                                      
+  MemoryAllocationLib                                                                                                                                           
+  PrintLib                                                                                                                                                      
+                                                                                                                                                                
+[Protocols]        
+  gEfiSimpleFileSystemProtocolGuid
+  gEfiLoadedImageProtocolGuid                                                                                                                                             
+                                                                                                                                                                
+[Guids]                                                                                                                                                         
+                                                                                                                                                                
+[FeaturePcd]                                                                                                                                                    
+                                                                                                                                                                
+[Pcd]     
