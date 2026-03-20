@@ -268,8 +268,16 @@ MapUnmappedMemoryAsConventional (
   // Find gaps between mapped regions and map them as conventional memory
   //
   Descriptor = MemoryMap;
-  for (Index = 0; Index < (MemoryMapSize / DescriptorSize) - 1; Index++) {
+  UINTN NumEntries = MemoryMapSize / DescriptorSize;
+  EFI_PHYSICAL_ADDRESS HighestMappedEnd = 0;
+  
+  for (Index = 0; Index < NumEntries - 1; Index++) {
     CurrentAddr = Descriptor->PhysicalStart + EFI_PAGES_TO_SIZE (Descriptor->NumberOfPages);
+    
+    // Track the highest mapped address
+    if (CurrentAddr > HighestMappedEnd) {
+      HighestMappedEnd = CurrentAddr;
+    }
     
     EFI_MEMORY_DESCRIPTOR *NextDescriptor = (EFI_MEMORY_DESCRIPTOR *)((UINT8 *)Descriptor + DescriptorSize);
     NextAddr = NextDescriptor->PhysicalStart;
@@ -287,8 +295,8 @@ MapUnmappedMemoryAsConventional (
       if ((GapStart % EFI_PAGE_SIZE == 0) && (GapSize >= EFI_PAGE_SIZE)) {
         Pages = EFI_SIZE_TO_PAGES (GapSize);
         
-        Print (L"Found unmapped region: 0x%016lx - 0x%016lx (%ld pages)\n", 
-               GapStart, GapStart + GapSize - 1, Pages);
+        Print (L"Found gap: 0x%016lx - 0x%016lx (%ld MB)\n", 
+               GapStart, GapStart + GapSize - 1, GapSize / (1024 * 1024));
         
         //
         // Try to allocate this region as conventional memory
@@ -301,14 +309,75 @@ MapUnmappedMemoryAsConventional (
                         &AllocAddr
                         );
         if (!EFI_ERROR (Status)) {
-          Print (L"Successfully mapped region as conventional memory\n");
+          Print (L"Successfully mapped gap as conventional memory\n");
         } else {
-          Print (L"Failed to map region (Status = %r)\n", Status);
+          Print (L"Failed to map gap (Status = %r)\n", Status);
         }
       }
     }
 
     Descriptor = (EFI_MEMORY_DESCRIPTOR *)((UINT8 *)Descriptor + DescriptorSize);
+  }
+  
+  //
+  // Check the last descriptor for the highest mapped end
+  //
+  CurrentAddr = Descriptor->PhysicalStart + EFI_PAGES_TO_SIZE (Descriptor->NumberOfPages);
+  if (CurrentAddr > HighestMappedEnd) {
+    HighestMappedEnd = CurrentAddr;
+  }
+  
+  //
+  // Now search for unmapped memory beyond the highest mapped address
+  // We'll probe up to a reasonable limit (e.g., 64GB on 64-bit systems)
+  //
+  EFI_PHYSICAL_ADDRESS ProbeLimit;
+  if (sizeof(VOID*) == 8) {
+    // 64-bit system - probe up to 64GB
+    ProbeLimit = 64ULL * 1024 * 1024 * 1024;
+  } else {
+    // 32-bit system - probe up to 4GB
+    ProbeLimit = 4ULL * 1024 * 1024 * 1024;
+  }
+  
+  Print (L"Highest mapped end: 0x%016lx, probing up to 0x%016lx\n", HighestMappedEnd, ProbeLimit);
+  
+  if (HighestMappedEnd < ProbeLimit) {
+    //
+    // Try to allocate memory in large chunks beyond the mapped region
+    //
+    EFI_PHYSICAL_ADDRESS ProbeAddr = HighestMappedEnd;
+    UINTN ChunkSize = 256 * 1024 * 1024; // 256MB chunks
+    
+    while (ProbeAddr + ChunkSize <= ProbeLimit) {
+      Pages = EFI_SIZE_TO_PAGES (ChunkSize);
+      EFI_PHYSICAL_ADDRESS AllocAddr = ProbeAddr;
+      
+      Status = gBS->AllocatePages (
+                      AllocateAddress,
+                      EfiConventionalMemory,
+                      Pages,
+                      &AllocAddr
+                      );
+      if (!EFI_ERROR (Status)) {
+        Print (L"Mapped unmapped region: 0x%016lx - 0x%016lx (%ld MB)\n", 
+               ProbeAddr, ProbeAddr + ChunkSize - 1, ChunkSize / (1024 * 1024));
+        ProbeAddr += ChunkSize;
+      } else {
+        // Try smaller chunks if large allocation fails
+        if (ChunkSize > 16 * 1024 * 1024) {
+          ChunkSize = 16 * 1024 * 1024; // Try 16MB chunks
+          continue;
+        } else if (ChunkSize > 1024 * 1024) {
+          ChunkSize = 1024 * 1024; // Try 1MB chunks
+          continue;
+        } else {
+          // Skip this region and try the next chunk
+          ProbeAddr += ChunkSize;
+          ChunkSize = 256 * 1024 * 1024; // Reset to large chunks
+        }
+      }
+    }
   }
 
   FreePool (MemoryMap);
